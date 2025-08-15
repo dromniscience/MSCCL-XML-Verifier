@@ -211,6 +211,15 @@ void GpuRank::InitializeThreadBlocks(tinyxml2::XMLElement* rank_elem, std::share
     for (auto& th : threads) {
         th.join();
     }
+
+    // Check XML node number under each GPU
+    size_t xml_node_nums = 1 + threadblocks.size();
+    for (const auto& tb : threadblocks) {
+        xml_node_nums += tb->getInstructions().size();
+    }
+    if (xml_node_nums > 4096) {
+        throw std::runtime_error("Number of XML nodes (" + std::to_string(xml_node_nums) + ") exceeds the limit of 4096 in rank " + std::to_string(rank) + ".");
+    }
 }
 
 void GpuRank::ExecuteThreadBlocks() {
