@@ -40,6 +40,12 @@ Instruction::Instruction(tinyxml2::XMLElement* step_elem) {
     dep_tbid = std::stoi(SafeGetAttribute(step_elem, "depid"));
     dep_step = std::stoi(SafeGetAttribute(step_elem, "deps"));
     has_dep = std::stoi(SafeGetAttribute(step_elem, "hasdep")) != 0;
+
+    if (op == OpType::rcs) {
+        if (src_buff != dst_buff || src_off != dst_off) {
+            throw std::runtime_error("For RCS operation, src and dst buffers and offsets must match.");
+        }
+    }
 }
 
 std::ostream& operator<<(std::ostream& os, const OpType& op) {
