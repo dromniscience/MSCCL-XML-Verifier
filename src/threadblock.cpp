@@ -152,9 +152,17 @@ void ThreadBlock::ExecuteSingleStep(int step) {
 
 void ThreadBlock::ExecuteInstructions() {
     int num_steps = instructions.size();
+    SleepForRandomTime(SLEEP_TIME.count() * MAX_TRIES / 1000.0);
     for (int step = 0; step < num_steps; ++step) {
         ExecuteSingleStep(step);
     }
+}
+
+void ThreadBlock::SleepForRandomTime(double max_us) {
+    if (max_us <= 0) return;
+    std::uniform_real_distribution<double> dist(0.0, max_us);
+    double sleep_time = dist(this->rng);
+    std::this_thread::sleep_for(std::chrono::duration<double, std::micro>(sleep_time));
 }
 
 std::shared_ptr<ThreadBlock> GpuRank::getThreadBlock(int tbid) const {

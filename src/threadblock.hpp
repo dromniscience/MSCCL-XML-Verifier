@@ -2,6 +2,7 @@
 #include "mailbox.hpp"
 #include <set>
 #include <functional>
+#include <random>
 
 class GpuRank;
 class CommGroup;
@@ -13,6 +14,12 @@ public:
     const std::vector<Instruction>& getInstructions() const;
     void ExecuteSingleStep(int step);
     void ExecuteInstructions();
+    /**
+     * @brief Sleeps for a random duration up to max_us microseconds.
+     * @param max_us The maximum number of microseconds to sleep.
+     * Used to stagger operations.
+     */
+    void SleepForRandomTime(double max_us);
 
 private:
     int tbid, send_peer, recv_peer, chan_id;
@@ -20,6 +27,7 @@ private:
     std::shared_ptr<Mailbox> recv_mailbox;
     std::shared_ptr<GpuRank> gpu_rank;
     std::vector<Instruction> instructions;
+    std::mt19937 rng{std::random_device{}()};
 };
 
 class GpuRank: public std::enable_shared_from_this<GpuRank> {
