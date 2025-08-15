@@ -8,8 +8,8 @@
 #include <memory>
 #include <map>
 
-#define MAX_TRIES 1000
-#define SLEEP_TIME std::chrono::milliseconds(1)
+#define MAX_TRIES 100000 // Total wait time: 100000 * 1us = 100ms
+#define SLEEP_TIME std::chrono::microseconds(1)
 
 using ChunkDataType = std::string;
 

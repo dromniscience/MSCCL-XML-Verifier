@@ -20,8 +20,15 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    int num_ranks = comm_group->getNumRanks();
-    std::cout << "Initialized " << num_ranks << " ranks." << std::endl;
+    int num_chunks = std::stoi(SafeGetAttribute(root_elem, "nchunksperloop"));
+    int num_ranks = std::stoi(SafeGetAttribute(root_elem, "ngpus"));
+    if (num_chunks % num_ranks != 0) {
+        std::cerr << "Error: Number of chunks must be a multiple of number of ranks." << std::endl;
+        return 1;
+    }
+    size_t chunk_factor = num_chunks / num_ranks;
+    std::cout << "Initialized " << num_ranks << " ranks, chunk factor " << chunk_factor << std::endl;
+
     if (!comm_group->getMailboxManager()->checkNoPendingConnections()) {
         std::cerr << "Error: There are pending connections in the mailbox manager." << std::endl;
         return 1;
@@ -32,11 +39,11 @@ int main(int argc, char* argv[]) {
     }
     std::cout << "Channels built." << std::endl;
 
-    auto init_func = [](int rank_id, size_t index) -> ChunkDataType {
-        return std::to_string(rank_id);
+    auto init_func = [chunk_factor](int rank_id, size_t index) -> ChunkDataType {
+        return std::to_string(rank_id) + "_" + std::to_string(index % chunk_factor);
     };
-    auto check_func = [](int rank_id, size_t index) -> ChunkDataType {
-        return std::to_string(index);
+    auto check_func = [chunk_factor](int rank_id, size_t index) -> ChunkDataType {
+        return std::to_string(index / chunk_factor) + "_" + std::to_string(index % chunk_factor);
     };
 
     int run_iters = std::stoi(argv[2]);
@@ -44,9 +51,9 @@ int main(int argc, char* argv[]) {
         if (i % 100 == 0) {
             std::cout << "Running iteration " << i << "/" << run_iters << std::endl;
         }
-        comm_group->InitData(init_func, 1);
+        comm_group->InitData(init_func, chunk_factor);
         comm_group->ExecuteRanks();
-        comm_group->CheckData(check_func, num_ranks);
+        comm_group->CheckData(check_func, num_chunks);
         if (!comm_group->getMailboxManager()->checkNoPendingMessage()) {
             std::cerr << "Error: There are pending messages in the mailbox manager after iteration " << i << "." << std::endl;
             return 1;
