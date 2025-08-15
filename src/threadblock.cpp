@@ -35,6 +35,29 @@ void ThreadBlock::LoadInstructions(tinyxml2::XMLElement* tb_elem) {
             throw std::runtime_error("Number of instructions exceeds the limit of 256 in ThreadBlock " + std::to_string(tbid) + " Rank " + std::to_string(gpu_rank->rank) + ".");
         }
     }
+    // Check that no recv proceeds rcs instructions and no send follows rcs instructions
+    size_t first_recv = instructions.size();
+    size_t last_send = 0;
+    size_t first_rcs = instructions.size();
+    size_t last_rcs = 0;
+    for (size_t i = 0; i < instructions.size(); ++i) {
+        if (instructions[i].op == OpType::recv) {
+            first_recv = std::min(first_recv, i);
+        }
+        if (instructions[i].op == OpType::send) {
+            last_send = std::max(last_send, i);
+        }
+        if (instructions[i].op == OpType::rcs) {
+            first_rcs = std::min(first_rcs, i);
+            last_rcs = std::max(last_rcs, i);
+        }
+    }
+    if (first_recv < last_rcs) {
+        throw std::runtime_error("A recv instruction cannot precede an rcs instruction in ThreadBlock " + std::to_string(tbid) + " Rank " + std::to_string(gpu_rank->rank) + ".");
+    }
+    if (last_send > first_rcs) {
+        throw std::runtime_error("A send instruction cannot be after an rcs instruction in ThreadBlock " + std::to_string(tbid) + " Rank " + std::to_string(gpu_rank->rank) + ".");
+    }
 }
 
 const std::vector<Instruction>& ThreadBlock::getInstructions() const {
@@ -275,6 +298,9 @@ void CommGroup::InitializeRanks(tinyxml2::XMLElement* root_elem) {
         throw std::runtime_error("Number of channels exceeds the limit of 32.");
     }
     int num_chunks = std::stoi(SafeGetAttribute(root_elem, "nchunksperloop"));
+    if (num_chunks & (num_chunks - 1)) {
+        throw std::runtime_error("Number of chunks should be a power of 2, got " + std::to_string(num_chunks) + ".");
+    }
     int outofplace = std::stoi(SafeGetAttribute(root_elem, "outofplace"));
     if (outofplace == 0) {
         throw std::runtime_error("Only out-of-place collective is supported.");
