@@ -1,6 +1,7 @@
 #pragma once
 #include "mailbox.hpp"
 #include <set>
+#include <functional>
 
 class GpuRank;
 class CommGroup;

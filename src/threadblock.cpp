@@ -31,6 +31,9 @@ void ThreadBlock::LoadInstructions(tinyxml2::XMLElement* tb_elem) {
         if (instructions.back().step != static_cast<int>(instructions.size()) - 1) {
             throw std::runtime_error("Instructions in ThreadBlock " + std::to_string(tbid) + " Rank " + std::to_string(gpu_rank->rank) + " are not in the correct order.");
         }
+        if (instructions.back().step >= 256) {
+            throw std::runtime_error("Number of instructions exceeds the limit of 256 in ThreadBlock " + std::to_string(tbid) + " Rank " + std::to_string(gpu_rank->rank) + ".");
+        }
     }
 }
 
@@ -171,6 +174,9 @@ void GpuRank::InitializeThreadBlocks(tinyxml2::XMLElement* rank_elem, std::share
     buffers[BufferType::scratch].resize(s_chunks);
 
     int num_tbs = rank_elem->ChildElementCount("tb");
+    if (num_tbs >= 78) {
+        throw std::runtime_error("Number of threadblocks exceeds the limit of 78 in rank " + std::to_string(rank) + ".");
+    }
     std::vector<tinyxml2::XMLElement*> tb_elem(num_tbs);
     for (int i = 0; i < num_tbs; ++i) {
         if (i == 0) {
@@ -248,6 +254,9 @@ std::shared_ptr<MailboxManager> CommGroup::getMailboxManager() const {
 void CommGroup::InitializeRanks(tinyxml2::XMLElement* root_elem) {
     int num_ranks = std::stoi(SafeGetAttribute(root_elem, "ngpus"));
     int num_chans = std::stoi(SafeGetAttribute(root_elem, "nchannels"));
+    if (num_chans > 32) {
+        throw std::runtime_error("Number of channels exceeds the limit of 32.");
+    }
     int num_chunks = std::stoi(SafeGetAttribute(root_elem, "nchunksperloop"));
     int outofplace = std::stoi(SafeGetAttribute(root_elem, "outofplace"));
     if (outofplace == 0) {

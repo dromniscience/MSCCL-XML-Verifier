@@ -79,6 +79,26 @@ bool MailboxManager::checkChannelLayout() const {
         senders_set.insert(key.send_rank);
         receivers_set.insert(key.recv_rank);
     }
+    int current_chan = 0;
+    for (const auto& [chan_id, senders] : chan_send) {
+        if (chan_id != current_chan) {
+            return false; // Channels are not in order
+        }
+        current_chan++;
+        if (senders.size() > 128) {
+            return false; // More than 128 senders in a channel
+        }
+    }
+    current_chan = 0;
+    for (const auto& [chan_id, receivers] : chan_recv) {
+        if (chan_id != current_chan) {
+            return false; // Channels are not in order
+        }
+        current_chan++;
+        if (receivers.size() > 128) {
+            return false; // More than 128 receivers in a channel
+        }
+    }
     return true;
 }
 
