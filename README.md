@@ -12,9 +12,13 @@ cmake .. && make
 Currently, we provide the following verifiers:
 1. An `allgather-verifier` that verifies the validity of an algorithm written for out-of-place AllGather.
 2. An `alltoall-verifier` that verifies the validity of an algorithm written for out-of-place AllToAll with uniform buffer parition.
+3. An `alltoallv-verifier` that verifies the validity of an algorithm written for out-of-place AllToAll with variable buffer parition.
 
 To run a verification, use `./<verifier> <xml> <run_iters>`.
-It will execute the algorithm for the specified number of times and check whether the output buffer is correct.
+It will execute the algorithm for the specified number of times (`run_iters`) and check whether the output buffer is correct.
+Note that `alltoallv-verifier` takes an additional input csv file `./alltoallv-verifier <xml> <run_iters> <csv>`.
+This file should contain $W\times W$ integer values, given that $W$ is the world size (i.e., `ngpus` in the XML file).
+The cell at the $i$-th row and $j$-th column means the number of chunks that are sent from rank $i$ to rank $j$.
 
 # Key Idea of Simulation
 We simulate a GPU threadblock with a CPU thread, because instructions within a threadblock are executed sequentially.

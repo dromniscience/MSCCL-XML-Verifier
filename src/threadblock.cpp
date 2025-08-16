@@ -299,9 +299,9 @@ void CommGroup::InitializeRanks(tinyxml2::XMLElement* root_elem) {
         throw std::runtime_error("Number of channels exceeds the limit of 32.");
     }
     int num_chunks = std::stoi(SafeGetAttribute(root_elem, "nchunksperloop"));
-    if (num_chunks & (num_chunks - 1)) {
-        throw std::runtime_error("Number of chunks should be a power of 2, got " + std::to_string(num_chunks) + ".");
-    }
+    // if (num_chunks & (num_chunks - 1)) {
+    //     throw std::runtime_error("Number of chunks should be a power of 2, got " + std::to_string(num_chunks) + ".");
+    // }
     int outofplace = std::stoi(SafeGetAttribute(root_elem, "outofplace"));
     if (outofplace == 0) {
         throw std::runtime_error("Only out-of-place collective is supported.");

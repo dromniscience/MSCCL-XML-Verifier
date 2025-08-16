@@ -25,3 +25,4 @@ endfunction()
 
 add_verifier(allgather-verifier)
 add_verifier(alltoall-verifier)
+add_verifier(alltoallv-verifier)
