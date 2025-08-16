@@ -236,7 +236,8 @@ void GpuRank::InitializeThreadBlocks(tinyxml2::XMLElement* rank_elem, std::share
     }
 
     // Check XML node number under each GPU
-    size_t xml_node_nums = 1 + threadblocks.size();
+    // Update: Also includes the rank number in compliance with the logic in msccl-executor-nccl
+    size_t xml_node_nums = 1 + threadblocks.size() + comm_group->getNumRanks();
     for (const auto& tb : threadblocks) {
         xml_node_nums += tb->getInstructions().size();
     }

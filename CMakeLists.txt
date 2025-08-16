@@ -1,7 +1,27 @@
 cmake_minimum_required(VERSION 3.10)
-project(xml-verifier)
+project(xml-verifier LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-add_executable(allgather-verifier src/allgather-verifier.cpp src/threadblock.cpp src/mailbox.cpp src/instructions.cpp src/tinyxml2.cpp)
-target_link_libraries(allgather-verifier pthread)
+find_package(Threads REQUIRED)
+
+set(COMMON_SOURCES
+    src/threadblock.cpp
+    src/mailbox.cpp
+    src/instructions.cpp
+    src/tinyxml2.cpp
+)
+
+add_library(verifier_core STATIC ${COMMON_SOURCES})
+target_include_directories(verifier_core PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src)
+target_link_libraries(verifier_core PUBLIC Threads::Threads)
+target_compile_features(verifier_core PUBLIC cxx_std_17)
+
+function(add_verifier name)
+  add_executable(${name} "src/${name}.cpp")
+  target_link_libraries(${name} PRIVATE verifier_core)
+endfunction()
+
+add_verifier(allgather-verifier)
+add_verifier(alltoall-verifier)

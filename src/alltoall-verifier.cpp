@@ -15,7 +15,8 @@ int main(int argc, char* argv[]) {
     std::shared_ptr<CommGroup> comm_group = std::make_shared<CommGroup>();
     comm_group->InitializeRanks(root_elem);
 
-    if (SafeGetAttribute(root_elem, "coll") != std::string("allgather")) {
+    // Update: Not typo, required by CCF test
+    if (SafeGetAttribute(root_elem, "coll") != std::string("allreduce")) {
         std::cerr << "Error: Only allgather collective is supported." << std::endl;
         return 1;
     }
@@ -40,10 +41,10 @@ int main(int argc, char* argv[]) {
     std::cout << "Channels built." << std::endl;
 
     auto init_func = [chunk_factor](int rank_id, size_t index) -> ChunkDataType {
-        return std::to_string(rank_id) + "_" + std::to_string(index % chunk_factor);
+        return std::to_string(rank_id) + "_" + std::to_string(index / chunk_factor) + "_" + std::to_string(index % chunk_factor);
     };
     auto check_func = [chunk_factor](int rank_id, size_t index) -> ChunkDataType {
-        return std::to_string(index / chunk_factor) + "_" + std::to_string(index % chunk_factor);
+        return std::to_string(index / chunk_factor) + "_" + std::to_string(rank_id) + "_" + std::to_string(index % chunk_factor);
     };
 
     int run_iters = std::stoi(argv[2]);
@@ -51,7 +52,7 @@ int main(int argc, char* argv[]) {
         if (i % 10 == 0) {
             std::cout << "Running iteration " << i << "/" << run_iters << std::endl;
         }
-        comm_group->InitData(init_func, chunk_factor);
+        comm_group->InitData(init_func, num_chunks);
         comm_group->ExecuteRanks();
         comm_group->CheckData(check_func, num_chunks);
         if (!comm_group->getMailboxManager()->checkNoPendingMessage()) {

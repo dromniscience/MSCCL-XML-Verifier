@@ -9,9 +9,11 @@ mkdir -p build && cd build
 cmake .. && make
 ```
 
-Currently, we provide an `allgather-verifier` that verifies the validity of an algorithm written for out-of-place AllGather.
+Currently, we provide the following verifiers:
+1. An `allgather-verifier` that verifies the validity of an algorithm written for out-of-place AllGather.
+2. An `alltoall-verifier` that verifies the validity of an algorithm written for out-of-place AllToAll with uniform buffer parition.
 
-To run a verification, use `./allgather-verifier <xml> <run_iters>`.
+To run a verification, use `./<verifier> <xml> <run_iters>`.
 It will execute the algorithm for the specified number of times and check whether the output buffer is correct.
 
 # Key Idea of Simulation
