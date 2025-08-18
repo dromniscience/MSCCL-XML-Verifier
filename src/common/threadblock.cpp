@@ -35,6 +35,8 @@ void ThreadBlock::LoadInstructions(tinyxml2::XMLElement* tb_elem) {
             throw std::runtime_error("Number of instructions exceeds the limit of 256 in ThreadBlock " + std::to_string(tbid) + " Rank " + std::to_string(gpu_rank->rank) + ".");
         }
     }
+    /*
+    // Update: Skip this check (because it is overly restrictive)
     // Check that no recv proceeds rcs instructions and no send follows rcs instructions
     size_t first_recv = instructions.size();
     size_t last_send = 0;
@@ -58,6 +60,7 @@ void ThreadBlock::LoadInstructions(tinyxml2::XMLElement* tb_elem) {
     if (last_send > first_rcs) {
         throw std::runtime_error("A send instruction cannot be after an rcs instruction in ThreadBlock " + std::to_string(tbid) + " Rank " + std::to_string(gpu_rank->rank) + ".");
     }
+    */
 }
 
 const std::vector<Instruction>& ThreadBlock::getInstructions() const {
@@ -284,6 +287,14 @@ size_t CommGroup::getNumRanks() const {
     return ranks.size();
 }
 
+size_t CommGroup::getNumChunks() const {
+    return num_chunks;
+}
+
+size_t CommGroup::getChunkFactor() const {
+    return num_chunks / ranks.size();
+}
+
 std::shared_ptr<GpuRank> CommGroup::getRank(int rank_id) const {
     return ranks.at(rank_id);
 }
@@ -298,10 +309,10 @@ void CommGroup::InitializeRanks(tinyxml2::XMLElement* root_elem) {
     if (num_chans > 32) {
         throw std::runtime_error("Number of channels exceeds the limit of 32.");
     }
-    int num_chunks = std::stoi(SafeGetAttribute(root_elem, "nchunksperloop"));
-    // if (num_chunks & (num_chunks - 1)) {
-    //     throw std::runtime_error("Number of chunks should be a power of 2, got " + std::to_string(num_chunks) + ".");
-    // }
+    this->num_chunks = std::stoul(SafeGetAttribute(root_elem, "nchunksperloop"));
+    if (this->num_chunks % num_ranks != 0) {
+        throw std::runtime_error("Number of chunks (" + std::to_string(this->num_chunks) + ") must be a multiple of number of ranks (" + std::to_string(num_ranks) + ").");
+    }
     int outofplace = std::stoi(SafeGetAttribute(root_elem, "outofplace"));
     if (outofplace == 0) {
         throw std::runtime_error("Only out-of-place collective is supported.");

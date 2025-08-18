@@ -1,4 +1,4 @@
-#include "threadblock.hpp"
+#include "common/threadblock.hpp"
 
 int main(int argc, char* argv[]) {
     if (argc != 3) {
@@ -20,14 +20,10 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    int num_chunks = std::stoi(SafeGetAttribute(root_elem, "nchunksperloop"));
-    int num_ranks = std::stoi(SafeGetAttribute(root_elem, "ngpus"));
-    if (num_chunks % num_ranks != 0) {
-        std::cerr << "Error: Number of chunks must be a multiple of number of ranks." << std::endl;
-        return 1;
-    }
-    size_t chunk_factor = num_chunks / num_ranks;
-    std::cout << "Initialized " << num_ranks << " ranks, chunk factor " << chunk_factor << std::endl;
+    const int num_ranks = static_cast<int>(comm_group->getNumRanks());
+    const int chunk_factor = static_cast<int>(comm_group->getChunkFactor());
+    const int num_chunks = static_cast<int>(comm_group->getNumChunks());
+    std::cout << "Initialized " << num_ranks << " ranks, " << num_chunks << " chunks, chunk factor " << chunk_factor << std::endl;
 
     if (!comm_group->getMailboxManager()->checkNoPendingConnections()) {
         std::cerr << "Error: There are pending connections in the mailbox manager." << std::endl;
@@ -55,7 +51,7 @@ int main(int argc, char* argv[]) {
         comm_group->ExecuteRanks();
         comm_group->CheckData(check_func, num_chunks);
         if (!comm_group->getMailboxManager()->checkNoPendingMessage()) {
-            std::cerr << "Error: There are pending messages in the mailbox manager after iteration " << i << "." << std::endl;
+            std::cerr << "Error: There are pending messages in the mailbox after iteration " << i << "." << std::endl;
             return 1;
         }
     }

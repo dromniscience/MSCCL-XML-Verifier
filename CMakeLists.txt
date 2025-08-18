@@ -7,10 +7,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(Threads REQUIRED)
 
 set(COMMON_SOURCES
-    src/threadblock.cpp
-    src/mailbox.cpp
-    src/instructions.cpp
-    src/tinyxml2.cpp
+    src/common/threadblock.cpp
+    src/common/mailbox.cpp
+    src/common/instructions.cpp
+    src/common/tinyxml2.cpp
 )
 
 add_library(verifier_core STATIC ${COMMON_SOURCES})

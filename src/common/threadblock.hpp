@@ -66,6 +66,8 @@ private:
 class CommGroup: public std::enable_shared_from_this<CommGroup> {
 public:
     size_t getNumRanks() const;
+    size_t getChunkFactor() const;
+    size_t getNumChunks() const;
     std::shared_ptr<GpuRank> getRank(int rank_id) const;
     std::shared_ptr<MailboxManager> getMailboxManager() const;
     void InitializeRanks(tinyxml2::XMLElement* root_elem);
@@ -82,6 +84,7 @@ public:
     void CheckData(std::function<ChunkDataType(int, size_t)> check_func, size_t output_buff_size) const;
 
 private:
+    size_t num_chunks;
     std::vector<std::shared_ptr<GpuRank>> ranks;
     std::shared_ptr<MailboxManager> mailboxManager;
 

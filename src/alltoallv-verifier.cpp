@@ -1,4 +1,4 @@
-#include "threadblock.hpp"
+#include "common/threadblock.hpp"
 #include <fstream>
 #include <sstream>
 #include <cassert>
@@ -82,18 +82,14 @@ int main(int argc, char* argv[]) {
 
     // Update: Not typo, required by CCF test
     if (SafeGetAttribute(root_elem, "coll") != std::string("allreduce")) {
-        std::cerr << "Error: Only allgather collective is supported." << std::endl;
+        std::cerr << "Error: Only alltoall collective is supported (coll should be \"allreduce\" in the xml)." << std::endl;
         return 1;
     }
 
-    const int num_chunks = std::stoi(SafeGetAttribute(root_elem, "nchunksperloop"));
-    const int num_ranks = std::stoi(SafeGetAttribute(root_elem, "ngpus"));
-    if (num_chunks % num_ranks != 0) {
-        std::cerr << "Error: Number of chunks must be a multiple of number of ranks." << std::endl;
-        return 1;
-    }
-    size_t chunk_factor = num_chunks / num_ranks;
-    std::cout << "Initialized " << num_ranks << " ranks, chunk factor " << chunk_factor << std::endl;
+    const int num_ranks = static_cast<int>(comm_group->getNumRanks());
+    const int chunk_factor = static_cast<int>(comm_group->getChunkFactor());
+    const int num_chunks = static_cast<int>(comm_group->getNumChunks());
+    std::cout << "Initialized " << num_ranks << " ranks, " << num_chunks << " chunks, chunk factor " << chunk_factor << std::endl;
 
     if (!comm_group->getMailboxManager()->checkNoPendingConnections()) {
         std::cerr << "Error: There are pending connections in the mailbox manager." << std::endl;
@@ -111,35 +107,29 @@ int main(int argc, char* argv[]) {
         std::cerr << "Error opening traffic file: " << argv[3] << std::endl;
         return 1;
     }
-    size_t* traffic_matrix = new size_t[num_ranks * num_ranks]();
-    size_t* acc_row_sums = new size_t[num_ranks * num_ranks]();
-    size_t* acc_col_sums = new size_t[num_ranks * num_ranks]();
-    ReadAllToAllTraffic(traffic_file, num_ranks, chunk_factor, traffic_matrix);
+    std::vector<size_t> traffic_matrix(num_ranks * num_ranks);
+    std::vector<size_t> acc_row_sums(num_ranks * num_ranks);
+    std::vector<size_t> acc_col_sums(num_ranks * num_ranks);
+    ReadAllToAllTraffic(traffic_file, num_ranks, chunk_factor, traffic_matrix.data());
     traffic_file.close();
 
-    ComputeAccumulateRowSums(traffic_matrix, acc_row_sums, num_ranks);
-    ComputeAccumulateColSums(traffic_matrix, acc_col_sums, num_ranks);
+    ComputeAccumulateRowSums(traffic_matrix.data(), acc_row_sums.data(), num_ranks);
+    ComputeAccumulateColSums(traffic_matrix.data(), acc_col_sums.data(), num_ranks);
 
     for (int i = num_ranks - 1; i < num_ranks * num_ranks; i += num_ranks) {
         if (acc_row_sums[i] != num_ranks * chunk_factor) {
             std::cerr << "Error: Rank " << i / num_ranks << " has incorrect row sum: " << acc_row_sums[i] << ", expected " << num_ranks * chunk_factor << std::endl;
-            delete [] traffic_matrix;
-            delete [] acc_row_sums;
-            delete [] acc_col_sums;
             return 1;
         }
     }
     for (int i = (num_ranks - 1) * num_ranks; i < num_ranks * num_ranks; ++i) {
         if (acc_col_sums[i] != num_ranks * chunk_factor) {
             std::cerr << "Error: Rank " << i % num_ranks << " has incorrect column sum: " << acc_col_sums[i] << ", expected " << num_ranks * chunk_factor << std::endl;
-            delete [] traffic_matrix;
-            delete [] acc_row_sums;
-            delete [] acc_col_sums;
             return 1;
         }
     }
 
-    ChunkDataType *result_data = new ChunkDataType[num_ranks * num_ranks * chunk_factor]();
+    std::vector<ChunkDataType> result_data(num_ranks * num_ranks * chunk_factor);
     for (int i = 0; i < num_ranks; ++i) {
         for (int j = 0; j < num_ranks; ++j) {
             // Chunks sent from rank i to rank j
@@ -169,14 +159,10 @@ int main(int argc, char* argv[]) {
         comm_group->ExecuteRanks();
         comm_group->CheckData(check_func, num_chunks);
         if (!comm_group->getMailboxManager()->checkNoPendingMessage()) {
-            std::cerr << "Error: There are pending messages in the mailbox manager after iteration " << i << "." << std::endl;
+            std::cerr << "Error: There are pending messages in the mailbox after iteration " << i << "." << std::endl;
             return 1;
         }
     }
     std::cout << "All tests passed." << std::endl;
-    delete [] traffic_matrix;
-    delete [] acc_row_sums;
-    delete [] acc_col_sums;
-    delete [] result_data;
     return 0;
 }
