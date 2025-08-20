@@ -46,6 +46,10 @@ public:
     void InitData(std::function<ChunkDataType(int, size_t)> init_func, size_t input_buff_size);
     void CheckData(std::function<ChunkDataType(int, size_t)> check_func, size_t output_buff_size) const;
 
+    void SetThreadBlockCompleted(int tbid);
+    void ZeroThreadBlockFlags(size_t num_tbs);
+    bool GetThreadBlockCompleted(int tbid) const;
+
 private:
     int rank;
     std::shared_ptr<CommGroup> comm_group;
@@ -53,6 +57,11 @@ private:
     
     std::set<InstructionStep> instructionSteps; // To track executed steps that other threadblocks depend on
     mutable std::mutex instructionMutex;
+
+private:
+    std::vector<int> tb_flags; // To track completed threadblocks
+    mutable std::mutex tbFlagsMutex;
+    std::mt19937 rng{std::random_device{}()};
 
     /**
      * Buffers Should not be protected, though maybe concurrently accessed by multiple threadblocks

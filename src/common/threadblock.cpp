@@ -1,5 +1,7 @@
 #include "threadblock.hpp"
 
+static const int NUM_GPU_SMS = 78; // 78 SMs on a Nvidia H20 GPU
+
 void ThreadBlock::Initialize(tinyxml2::XMLElement* tb_elem, std::shared_ptr<GpuRank> my_rank) {
     tbid = std::stoi(SafeGetAttribute(tb_elem, "id"));
     send_peer = std::stoi(SafeGetAttribute(tb_elem, "send"));
@@ -11,7 +13,10 @@ void ThreadBlock::Initialize(tinyxml2::XMLElement* tb_elem, std::shared_ptr<GpuR
         if (send_peer == gpu_rank->rank) {
             throw std::runtime_error("ThreadBlock " + std::to_string(tbid) + " in rank " + std::to_string(gpu_rank->rank) + " cannot send to itself.");
         }
-        gpu_rank->comm_group->mailboxManager->getSendMailbox(gpu_rank->rank, send_peer, chan_id, send_mailbox);
+        bool result = gpu_rank->comm_group->mailboxManager->getSendMailbox(gpu_rank->rank, send_peer, chan_id, send_mailbox);
+        if (!result) {
+            throw std::runtime_error("Mailbox already existed for ThreadBlock " + std::to_string(tbid) + " in rank " + std::to_string(gpu_rank->rank) + ".");
+        }
     }
     if (recv_peer >= 0) {
         if (recv_peer == gpu_rank->rank) {
@@ -195,6 +200,27 @@ std::shared_ptr<ThreadBlock> GpuRank::getThreadBlock(int tbid) const {
     return threadblocks.at(tbid);
 }
 
+void GpuRank::SetThreadBlockCompleted(int tbid) {
+    std::lock_guard<std::mutex> lock(tbFlagsMutex);
+    if (tbid < 0 || tbid >= tb_flags.size()) {
+        throw std::runtime_error("Invalid threadblock ID " + std::to_string(tbid) + " in rank " + std::to_string(rank) + ".");
+    }
+    tb_flags[tbid] = 1;
+}
+
+void GpuRank::ZeroThreadBlockFlags(size_t num_tbs) {
+    std::lock_guard<std::mutex> lock(tbFlagsMutex);
+    tb_flags = std::vector<int>(num_tbs, 0);
+}
+
+bool GpuRank::GetThreadBlockCompleted(int tbid) const {
+    std::lock_guard<std::mutex> lock(tbFlagsMutex);
+    if (tbid < 0 || tbid >= tb_flags.size()) {
+        throw std::runtime_error("Invalid threadblock ID " + std::to_string(tbid) + " in rank " + std::to_string(rank) + ".");
+    }
+    return tb_flags[tbid] != 0;
+}
+
 void GpuRank::InitializeThreadBlocks(tinyxml2::XMLElement* rank_elem, std::shared_ptr<CommGroup> my_group) {
     rank = std::stoi(SafeGetAttribute(rank_elem, "id"));
     comm_group = my_group;
@@ -208,9 +234,9 @@ void GpuRank::InitializeThreadBlocks(tinyxml2::XMLElement* rank_elem, std::share
     buffers[BufferType::scratch].resize(s_chunks);
 
     int num_tbs = rank_elem->ChildElementCount("tb");
-    if (num_tbs >= 78) {
-        throw std::runtime_error("Number of threadblocks exceeds the limit of 78 in rank " + std::to_string(rank) + ".");
-    }
+    // if (num_tbs >= 78) {
+    //     throw std::runtime_error("Number of threadblocks exceeds the limit of 78 in rank " + std::to_string(rank) + ".");
+    // }
     std::vector<tinyxml2::XMLElement*> tb_elem(num_tbs);
     for (int i = 0; i < num_tbs; ++i) {
         if (i == 0) {
@@ -228,6 +254,39 @@ void GpuRank::InitializeThreadBlocks(tinyxml2::XMLElement* rank_elem, std::share
         threadblocks.push_back(std::make_shared<ThreadBlock>());
     }
 
+    ZeroThreadBlockFlags(num_tbs);
+    std::map<int, std::thread> threads;
+    for (int i = 0; i < num_tbs;++i) {
+        if (threads.size() == NUM_GPU_SMS) {
+            // Wait for an existing thread to finish
+            size_t tries = 0;
+            auto it = threads.begin();
+            while (tries < MAX_TRIES) {
+                if (it == threads.end()) {
+                    it = threads.begin();
+                }
+                if (GetThreadBlockCompleted(it->first)) {
+                    it->second.join();
+                    threads.erase(it);
+                    break;
+                }
+                ++it;
+                ++tries;
+                std::this_thread::sleep_for(SLEEP_TIME);
+            }
+            if (threads.size() == NUM_GPU_SMS) {
+                throw std::runtime_error("Timeout waiting for threadblocks to finish in rank " + std::to_string(rank) + ".");
+            }
+        }
+        threads.emplace(i, std::thread([this, i, tb_elem]() {
+            this->threadblocks[i]->Initialize(tb_elem[i], shared_from_this());
+            this->SetThreadBlockCompleted(i);
+        }));
+    }
+    for (auto& th_pair : threads) {
+        th_pair.second.join();
+    }
+    /*
     std::vector<std::thread> threads;
     for (int i = 0; i < num_tbs; ++i) {
         threads.emplace_back([this, i, tb_elem]() {
@@ -236,7 +295,7 @@ void GpuRank::InitializeThreadBlocks(tinyxml2::XMLElement* rank_elem, std::share
     }
     for (auto& th : threads) {
         th.join();
-    }
+    }*/
 
     // Check XML node number under each GPU
     // Update: Also includes the rank number in compliance with the logic in msccl-executor-nccl
@@ -251,6 +310,46 @@ void GpuRank::InitializeThreadBlocks(tinyxml2::XMLElement* rank_elem, std::share
 
 void GpuRank::ExecuteThreadBlocks() {
     int num_tbs = threadblocks.size();
+    ZeroThreadBlockFlags(num_tbs);
+
+    std::vector<int> tb_ids;
+    for (int i = 0; i < num_tbs; ++i) {
+        tb_ids.push_back(i);
+    }
+    std::shuffle(tb_ids.begin(), tb_ids.end(), this->rng);
+    std::map<int, std::thread> threads;
+    for (int i = 0; i < num_tbs; ++i) {
+        int tbid = tb_ids[i];
+        if (threads.size() == NUM_GPU_SMS) {
+            // Wait for an existing thread to finish
+            size_t tries = 0;
+            auto it = threads.begin();
+            while (tries < MAX_TRIES) {
+                if (it == threads.end()) {
+                    it = threads.begin();
+                }
+                if (GetThreadBlockCompleted(it->first)) {
+                    it->second.join();
+                    threads.erase(it);
+                    break;
+                }
+                ++it;
+                ++tries;
+                std::this_thread::sleep_for(SLEEP_TIME);
+            }
+            if (threads.size() == NUM_GPU_SMS) {
+                throw std::runtime_error("Timeout waiting for threadblocks to finish in rank " + std::to_string(rank) + ".");
+            }
+        }
+        threads.emplace(tbid, std::thread([this, tbid]() {
+            this->threadblocks[tbid]->ExecuteInstructions();
+            this->SetThreadBlockCompleted(tbid);
+        }));
+    }
+    for (auto& th_pair : threads) {
+        th_pair.second.join();
+    }
+    /*
     std::vector<std::thread> threads;
     for (int i = 0; i < num_tbs; ++i) {
         threads.emplace_back([this, i]() {
@@ -260,6 +359,7 @@ void GpuRank::ExecuteThreadBlocks() {
     for (auto& th : threads) {
         th.join();
     }
+    */
 }
 
 void GpuRank::InitData(std::function<ChunkDataType(int, size_t)> init_func, size_t input_buff_size) {

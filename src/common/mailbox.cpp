@@ -64,6 +64,24 @@ bool MailboxManager::checkNoPendingConnections() const {
 }
 
 bool MailboxManager::checkChannelLayout() const {
+    std::map<std::pair<int, int>, std::set<int>> chan_send; // (rank_id, chan_id) -> set of send peers
+    std::map<std::pair<int, int>, std::set<int>> chan_recv; // (rank_id, chan_id) -> set of recv peers
+    std::lock_guard<std::mutex> lock(mailboxManagerMutex);
+    for (const auto& [key, mailbox]: established_mailboxes) {
+        chan_send[{key.send_rank, key.chan_id}].insert(key.recv_rank);
+        chan_recv[{key.recv_rank, key.chan_id}].insert(key.send_rank);
+    }
+    for (const auto& [key, send_peers] : chan_send) {
+        if (send_peers.size() > 128) {
+            return false; // More than 128 senders in a channel
+        }
+    }
+    for (const auto& [key, recv_peers] : chan_recv) {
+        if (recv_peers.size() > 128) {
+            return false; // More than 128 receivers in a channel
+        }
+    }
+    /*
     std::map<int, std::set<int>> chan_send; // chan_id -> set of send_ranks
     std::map<int, std::set<int>> chan_recv; // chan_id -> set of recv_ranks
     std::lock_guard<std::mutex> lock(mailboxManagerMutex);
@@ -98,7 +116,7 @@ bool MailboxManager::checkChannelLayout() const {
         if (receivers.size() > 128) {
             return false; // More than 128 receivers in a channel
         }
-    }
+    }*/
     return true;
 }
 
