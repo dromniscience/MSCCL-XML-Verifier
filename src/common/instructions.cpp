@@ -46,6 +46,12 @@ Instruction::Instruction(tinyxml2::XMLElement* step_elem) {
             throw std::runtime_error("For RCS operation, src and dst buffers and offsets must match.");
         }
     }
+
+    if (op != OpType::nop) {
+        if (num_chunks <= 0 || num_chunks >= 72) {
+            throw std::runtime_error("Number of chunks must be between 1 and 71 (inclusive), got " + std::to_string(num_chunks));
+        }
+    }
 }
 
 std::ostream& operator<<(std::ostream& os, const OpType& op) {

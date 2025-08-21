@@ -30,7 +30,7 @@ void ComputeAccumulateRowSums(const size_t *traffic_matrix, size_t *acc_row_sums
  */
 void ComputeAccumulateColSums(const size_t *traffic_matrix, size_t *acc_col_sums, const int num_ranks) {
     std::copy(traffic_matrix, traffic_matrix + num_ranks, acc_col_sums);
-    for (int i = num_ranks; i < num_ranks * num_ranks; ++i) {
+    for (int i = num_ranks; i < num_ranks * num_ranks; i += num_ranks) {
         for (int j = 0; j < num_ranks; ++j) {
             acc_col_sums[i + j] = acc_col_sums[i - num_ranks + j] + traffic_matrix[i + j];
         }
@@ -133,9 +133,9 @@ int main(int argc, char* argv[]) {
     for (int i = 0; i < num_ranks; ++i) {
         for (int j = 0; j < num_ranks; ++j) {
             // Chunks sent from rank i to rank j
-            size_t start_chunk = (j == 0) ? 0 : acc_row_sums[i * num_chunks + (j - 1)];
-            size_t end_chunk = acc_row_sums[i * num_chunks + j];
-            size_t result_chunk = (i == 0) ? 0 : acc_col_sums[(i - 1) * num_chunks + j];
+            size_t start_chunk = (j == 0) ? 0 : acc_row_sums[i * num_ranks + (j - 1)];
+            size_t end_chunk = acc_row_sums[i * num_ranks + j];
+            size_t result_chunk = (i == 0) ? 0 : acc_col_sums[(i - 1) * num_ranks + j];
             for (size_t k = start_chunk; k < end_chunk; ++k, ++result_chunk) {
                 result_data[j * num_ranks * chunk_factor + result_chunk] = std::to_string(i) + "_" + std::to_string(k);
             }
